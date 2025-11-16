@@ -192,29 +192,68 @@
 	});
 </script>
 
-<div class="flex min-h-screen flex-col items-center justify-center bg-gray-950 p-6 text-white">
-	<div class="w-full max-w-5xl">
-		<h1 class="mb-8 text-center text-4xl font-bold">Wheel of Names</h1>
+<div class="flex min-h-screen flex-col bg-gray-950 p-6 text-white">
+	<div class="mx-auto w-full max-w-6xl">
+		<h1 class="mb-8 text-center text-2xl font-bold">Wheel of Names</h1>
 
-		<div class="grid gap-6 lg:grid-cols-[300px,1fr,300px]">
+		<!-- Wheel -->
+		<div class="mb-8 flex flex-col items-center">
+			<div class="relative">
+				<!-- Pointer -->
+				<div
+					class="absolute left-1/2 top-0 z-10 h-0 w-0 -translate-x-1/2 border-x-15 border-t-30 border-x-transparent border-t-red-500"
+				></div>
+
+				<canvas
+					bind:this={canvas}
+					width="400"
+					height="400"
+					class="rounded-full shadow-2xl"
+				></canvas>
+			</div>
+
+		<button
+			onclick={spinWheel}
+			disabled={isSpinning || names.length === 0}
+			class="mt-6 rounded-lg bg-blue-600 px-8 py-3 text-lg font-semibold transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+		>
+			{isSpinning ? 'Spinning...' : 'Spin the Wheel'}
+		</button>
+
+		<div class="mt-4 h-24">
+			{#if winner}
+				<div class="rounded-lg bg-green-900/50 px-6 py-4 text-center">
+					<p class="text-sm uppercase tracking-wider text-green-400">Winner</p>
+					<p class="mt-1 text-2xl font-bold text-green-300">{winner}</p>
+				</div>
+			{/if}
+		</div>
+	</div>		<!-- Two Lists -->
+		<div class="grid gap-6 lg:grid-cols-2">
 			<!-- Names List -->
-			<div class="flex flex-col">
+			<div class="flex flex-col overflow-hidden">
 				<div class="mb-4 flex items-center justify-between">
 					<h2 class="text-xl font-semibold">Names ({names.length})</h2>
 					<div class="flex gap-2">
 						<button
 							onclick={() => showBulkInput = !showBulkInput}
 							disabled={isSpinning}
-							class="rounded-lg bg-purple-600 px-3 py-1.5 text-sm font-semibold transition-all hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
+							class="rounded-lg bg-gray-800 p-2 transition-all hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+							aria-label="Toggle bulk input"
 						>
-							{showBulkInput ? 'Hide' : 'Bulk'}
+							<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+								<path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd" />
+							</svg>
 						</button>
 						<button
 							onclick={clearAllNames}
 							disabled={isSpinning || names.length === 0}
-							class="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold transition-all hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+							class="rounded-lg bg-gray-800 p-2 transition-all hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+							aria-label="Clear all names"
 						>
-							Clear
+							<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+								<path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+							</svg>
 						</button>
 					</div>
 				</div>
@@ -225,14 +264,18 @@
 							bind:value={bulkNames}
 							placeholder="Paste names here (one per line)&#10;John&#10;Jane&#10;Alice&#10;Bob"
 							rows="6"
-							class="w-full rounded-lg bg-gray-800 px-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+							class="w-full rounded-lg bg-gray-800 px-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-600"
 						></textarea>
 						<button
 							onclick={uploadBulkNames}
 							disabled={!bulkNames.trim() || isSpinning}
-							class="w-full rounded-lg bg-purple-600 px-4 py-2 font-semibold transition-all hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
+							class="flex w-full items-center justify-center gap-2 rounded-lg bg-gray-800 px-4 py-2 transition-all hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+							aria-label="Upload names"
 						>
-							Upload Names
+							<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+								<path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+							</svg>
+							<span>Upload</span>
 						</button>
 					</div>
 				{/if}
@@ -243,14 +286,17 @@
 						bind:value={newName}
 						onkeypress={handleKeyPress}
 						placeholder="Enter a name"
-						class="flex-1 rounded-lg bg-gray-800 px-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+						class="flex-1 rounded-lg bg-gray-800 px-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-600"
 					/>
 					<button
 						onclick={addName}
 						disabled={!newName.trim() || isSpinning}
-						class="rounded-lg bg-green-600 px-4 py-2 font-semibold transition-all hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+						class="rounded-lg bg-gray-800 p-2 transition-all hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+						aria-label="Add name"
 					>
-						Add
+						<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
+							<path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
+						</svg>
 					</button>
 				</div>
 
@@ -263,7 +309,7 @@
 							<button
 								onclick={() => removeName(index)}
 								disabled={isSpinning || names.length <= 1}
-								class="text-red-400 transition-colors hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-30"
+								class="text-gray-400 transition-colors hover:text-gray-300 disabled:cursor-not-allowed disabled:opacity-30"
 								aria-label="Remove {name}"
 							>
 								<svg
@@ -284,38 +330,6 @@
 				</div>
 			</div>
 
-			<!-- Wheel -->
-			<div class="flex flex-col items-center justify-center">
-				<div class="relative">
-					<!-- Pointer -->
-					<div
-						class="absolute left-1/2 top-0 z-10 h-0 w-0 -translate-x-1/2 border-x-15 border-t-30 border-x-transparent border-t-red-500"
-					></div>
-
-					<canvas
-						bind:this={canvas}
-						width="500"
-						height="500"
-						class="rounded-full shadow-2xl"
-					></canvas>
-				</div>
-
-				<button
-					onclick={spinWheel}
-					disabled={isSpinning || names.length === 0}
-					class="mt-8 rounded-lg bg-blue-600 px-8 py-3 text-lg font-semibold transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-				>
-					{isSpinning ? 'Spinning...' : 'Spin the Wheel'}
-				</button>
-
-				{#if winner}
-					<div class="mt-6 rounded-lg bg-green-900/50 px-6 py-4 text-center">
-						<p class="text-sm uppercase tracking-wider text-green-400">Winner</p>
-						<p class="mt-1 text-2xl font-bold text-green-300">{winner}</p>
-					</div>
-				{/if}
-			</div>
-
 			<!-- Done List -->
 			<div class="flex flex-col">
 				<div class="mb-4 flex items-center justify-between">
@@ -323,16 +337,22 @@
 					<div class="flex gap-2">
 						<button
 							onclick={() => showBulkDoneInput = !showBulkDoneInput}
-							class="rounded-lg bg-purple-600 px-3 py-1.5 text-sm font-semibold transition-all hover:bg-purple-700"
+							class="rounded-lg bg-gray-800 p-2 transition-all hover:bg-gray-700"
+							aria-label="Toggle bulk input"
 						>
-							{showBulkDoneInput ? 'Hide' : 'Bulk'}
+							<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+								<path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd" />
+							</svg>
 						</button>
 						<button
 							onclick={clearAllDoneNames}
 							disabled={doneNames.length === 0}
-							class="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold transition-all hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+							class="rounded-lg bg-gray-800 p-2 transition-all hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+							aria-label="Clear all done names"
 						>
-							Clear
+							<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+								<path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+							</svg>
 						</button>
 					</div>
 				</div>
@@ -343,14 +363,18 @@
 							bind:value={bulkDoneNames}
 							placeholder="Paste done names here (one per line)&#10;John&#10;Jane&#10;Alice&#10;Bob"
 							rows="6"
-							class="w-full rounded-lg bg-gray-800 px-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+							class="w-full rounded-lg bg-gray-800 px-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-600"
 						></textarea>
 						<button
 							onclick={uploadBulkDoneNames}
 							disabled={!bulkDoneNames.trim()}
-							class="w-full rounded-lg bg-purple-600 px-4 py-2 font-semibold transition-all hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
+							class="flex w-full items-center justify-center gap-2 rounded-lg bg-gray-800 px-4 py-2 transition-all hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+							aria-label="Upload names"
 						>
-							Upload Names
+							<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+								<path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+							</svg>
+							<span>Upload</span>
 						</button>
 					</div>
 				{/if}
@@ -360,10 +384,24 @@
 						<div
 							class="flex items-center justify-between rounded-lg bg-gray-800 px-4 py-3 transition-all hover:bg-gray-700"
 						>
-							<span class="font-medium text-green-400">{name}</span>
+						<span class="font-medium {index === doneNames.length - 1 ? 'text-green-400' : ''}">{name}</span>
+						<div class="flex gap-2">
+							<button
+								onclick={() => {
+									names = [...names, name];
+									doneNames = doneNames.filter((_, i) => i !== index);
+									drawWheel();
+								}}
+								class="text-gray-400 transition-colors hover:text-gray-300"
+								aria-label="Move {name} back to names"
+							>
+								<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+									<path fill-rule="evenodd" d="M7.707 3.293a1 1 0 010 1.414L5.414 7H11a7 7 0 017 7v2a1 1 0 11-2 0v-2a5 5 0 00-5-5H5.414l2.293 2.293a1 1 0 11-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
+								</svg>
+							</button>
 							<button
 								onclick={() => removeDoneName(index)}
-								class="text-red-400 transition-colors hover:text-red-300"
+								class="text-gray-400 transition-colors hover:text-gray-300"
 								aria-label="Remove {name}"
 							>
 								<svg
@@ -379,6 +417,7 @@
 									/>
 								</svg>
 							</button>
+						</div>
 						</div>
 					{/each}
 				</div>
