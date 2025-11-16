@@ -2,9 +2,12 @@
 	import { onMount } from 'svelte';
 
 	let names = $state<string[]>(['Alice', 'Bob', 'Charlie', 'David', 'Emma', 'Frank']);
+	let doneNames = $state<string[]>([]);
 	let newName = $state('');
 	let bulkNames = $state('');
+	let bulkDoneNames = $state('');
 	let showBulkInput = $state(false);
+	let showBulkDoneInput = $state(false);
 	let rotation = $state(0);
 	let isSpinning = $state(false);
 	let winner = $state<string | null>(null);
@@ -68,8 +71,14 @@
 	function spinWheel() {
 		if (isSpinning || names.length === 0) return;
 
+		// Remove previous winner from names list before spinning
+		if (winner) {
+			names = names.filter(name => name !== winner);
+			winner = null;
+			drawWheel();
+		}
+
 		isSpinning = true;
-		winner = null;
 
 		const spinDuration = 3000 + Math.random() * 2000;
 		const totalRotation = 360 * 5 + Math.random() * 360;
@@ -99,10 +108,16 @@
 
 	function selectWinner() {
 		const sliceAngle = 360 / names.length;
-		// The pointer is at the top (0 degrees), so we need to find which slice is there
-		const adjustedRotation = (360 - (rotation % 360)) % 360;
-		const winnerIndex = Math.floor(adjustedRotation / sliceAngle) % names.length;
+		// The pointer is at the top (270 degrees in our coordinate system)
+		// We need to find which slice is pointing up
+		const pointerAngle = 270; // Top of the wheel
+		const adjustedRotation = (pointerAngle - rotation) % 360;
+		const normalizedAngle = adjustedRotation < 0 ? adjustedRotation + 360 : adjustedRotation;
+		const winnerIndex = Math.floor(normalizedAngle / sliceAngle) % names.length;
 		winner = names[winnerIndex];
+		
+		// Move winner to done list (will happen on next spin)
+		doneNames = [...doneNames, names[winnerIndex]];
 	}
 
 	function addName() {
@@ -142,11 +157,34 @@
 		}
 	}
 
+	function uploadBulkDoneNames() {
+		if (!bulkDoneNames.trim()) return;
+		
+		const newDoneNames = bulkDoneNames
+			.split('\n')
+			.map(name => name.trim())
+			.filter(name => name.length > 0);
+		
+		if (newDoneNames.length > 0) {
+			doneNames = [...doneNames, ...newDoneNames];
+			bulkDoneNames = '';
+			showBulkDoneInput = false;
+		}
+	}
+
 	function clearAllNames() {
 		if (!isSpinning) {
 			names = [];
 			drawWheel();
 		}
+	}
+
+	function removeDoneName(index: number) {
+		doneNames = doneNames.filter((_, i) => i !== index);
+	}
+
+	function clearAllDoneNames() {
+		doneNames = [];
 	}
 
 	$effect(() => {
@@ -158,39 +196,7 @@
 	<div class="w-full max-w-5xl">
 		<h1 class="mb-8 text-center text-4xl font-bold">Wheel of Names</h1>
 
-		<div class="grid gap-8 lg:grid-cols-[1fr,400px]">
-			<!-- Wheel -->
-			<div class="flex flex-col items-center justify-center">
-				<div class="relative">
-					<!-- Pointer -->
-					<div
-						class="absolute left-1/2 top-0 z-10 h-0 w-0 -translate-x-1/2 border-x-15 border-t-30 border-x-transparent border-t-red-500"
-					></div>
-
-					<canvas
-						bind:this={canvas}
-						width="500"
-						height="500"
-						class="rounded-full shadow-2xl"
-					></canvas>
-				</div>
-
-				<button
-					onclick={spinWheel}
-					disabled={isSpinning || names.length === 0}
-					class="mt-8 rounded-lg bg-blue-600 px-8 py-3 text-lg font-semibold transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-				>
-					{isSpinning ? 'Spinning...' : 'Spin the Wheel'}
-				</button>
-
-				{#if winner}
-					<div class="mt-6 rounded-lg bg-green-900/50 px-6 py-4 text-center">
-						<p class="text-sm uppercase tracking-wider text-green-400">Winner</p>
-						<p class="mt-1 text-2xl font-bold text-green-300">{winner}</p>
-					</div>
-				{/if}
-			</div>
-
+		<div class="grid gap-6 lg:grid-cols-[300px,1fr,300px]">
 			<!-- Names List -->
 			<div class="flex flex-col">
 				<div class="mb-4 flex items-center justify-between">
@@ -258,6 +264,106 @@
 								onclick={() => removeName(index)}
 								disabled={isSpinning || names.length <= 1}
 								class="text-red-400 transition-colors hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-30"
+								aria-label="Remove {name}"
+							>
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									class="h-5 w-5"
+									viewBox="0 0 20 20"
+									fill="currentColor"
+								>
+									<path
+										fill-rule="evenodd"
+										d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+										clip-rule="evenodd"
+									/>
+								</svg>
+							</button>
+						</div>
+					{/each}
+				</div>
+			</div>
+
+			<!-- Wheel -->
+			<div class="flex flex-col items-center justify-center">
+				<div class="relative">
+					<!-- Pointer -->
+					<div
+						class="absolute left-1/2 top-0 z-10 h-0 w-0 -translate-x-1/2 border-x-15 border-t-30 border-x-transparent border-t-red-500"
+					></div>
+
+					<canvas
+						bind:this={canvas}
+						width="500"
+						height="500"
+						class="rounded-full shadow-2xl"
+					></canvas>
+				</div>
+
+				<button
+					onclick={spinWheel}
+					disabled={isSpinning || names.length === 0}
+					class="mt-8 rounded-lg bg-blue-600 px-8 py-3 text-lg font-semibold transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+				>
+					{isSpinning ? 'Spinning...' : 'Spin the Wheel'}
+				</button>
+
+				{#if winner}
+					<div class="mt-6 rounded-lg bg-green-900/50 px-6 py-4 text-center">
+						<p class="text-sm uppercase tracking-wider text-green-400">Winner</p>
+						<p class="mt-1 text-2xl font-bold text-green-300">{winner}</p>
+					</div>
+				{/if}
+			</div>
+
+			<!-- Done List -->
+			<div class="flex flex-col">
+				<div class="mb-4 flex items-center justify-between">
+					<h2 class="text-xl font-semibold">Done ({doneNames.length})</h2>
+					<div class="flex gap-2">
+						<button
+							onclick={() => showBulkDoneInput = !showBulkDoneInput}
+							class="rounded-lg bg-purple-600 px-3 py-1.5 text-sm font-semibold transition-all hover:bg-purple-700"
+						>
+							{showBulkDoneInput ? 'Hide' : 'Bulk'}
+						</button>
+						<button
+							onclick={clearAllDoneNames}
+							disabled={doneNames.length === 0}
+							class="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold transition-all hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+						>
+							Clear
+						</button>
+					</div>
+				</div>
+
+				{#if showBulkDoneInput}
+					<div class="mb-4 space-y-2">
+						<textarea
+							bind:value={bulkDoneNames}
+							placeholder="Paste done names here (one per line)&#10;John&#10;Jane&#10;Alice&#10;Bob"
+							rows="6"
+							class="w-full rounded-lg bg-gray-800 px-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+						></textarea>
+						<button
+							onclick={uploadBulkDoneNames}
+							disabled={!bulkDoneNames.trim()}
+							class="w-full rounded-lg bg-purple-600 px-4 py-2 font-semibold transition-all hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
+						>
+							Upload Names
+						</button>
+					</div>
+				{/if}
+
+				<div class="flex-1 space-y-2 overflow-y-auto rounded-lg bg-gray-900 p-4">
+					{#each doneNames as name, index}
+						<div
+							class="flex items-center justify-between rounded-lg bg-gray-800 px-4 py-3 transition-all hover:bg-gray-700"
+						>
+							<span class="font-medium text-green-400">{name}</span>
+							<button
+								onclick={() => removeDoneName(index)}
+								class="text-red-400 transition-colors hover:text-red-300"
 								aria-label="Remove {name}"
 							>
 								<svg
