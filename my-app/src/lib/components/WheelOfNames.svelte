@@ -377,15 +377,16 @@
 							<span>Upload</span>
 						</button>
 					</div>
-				{/if}
+			{/if}
 
-				<div class="flex-1 space-y-2 overflow-y-auto rounded-lg bg-gray-900 p-4">
-					{#each doneNames as name, index}
-						<div
-							class="flex items-center justify-between rounded-lg bg-gray-800 px-4 py-3 transition-all hover:bg-gray-700"
-						>
-						<span class="font-medium {index === doneNames.length - 1 ? 'text-green-400' : ''}">{name}</span>
-						<div class="flex gap-2">
+			<div class="flex-1 space-y-2 overflow-y-auto rounded-lg bg-gray-900 p-4">
+				{#each doneNames.slice().reverse() as name, reverseIndex}
+					{@const index = doneNames.length - 1 - reverseIndex}
+					<div
+						class="flex items-center justify-between rounded-lg bg-gray-800 px-4 py-3 transition-all hover:bg-gray-700"
+					>
+					<span class="font-medium {index === doneNames.length - 1 ? 'text-green-400' : ''}">{name}</span>
+					<div class="flex gap-2">
 							<button
 								onclick={() => {
 									names = [...names, name];
