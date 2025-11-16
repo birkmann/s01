@@ -129,7 +129,7 @@
 	}
 
 	function removeName(index: number) {
-		if (!isSpinning && names.length > 1) {
+		if (!isSpinning && names.length > 1 && confirm(`Are you sure you want to remove "${names[index]}"?`)) {
 			names = names.filter((_, i) => i !== index);
 			drawWheel();
 		}
@@ -173,18 +173,22 @@
 	}
 
 	function clearAllNames() {
-		if (!isSpinning) {
+		if (!isSpinning && confirm('Are you sure you want to clear all names?')) {
 			names = [];
 			drawWheel();
 		}
 	}
 
 	function removeDoneName(index: number) {
-		doneNames = doneNames.filter((_, i) => i !== index);
+		if (confirm(`Are you sure you want to remove "${doneNames[index]}"?`)) {
+			doneNames = doneNames.filter((_, i) => i !== index);
+		}
 	}
 
 	function clearAllDoneNames() {
-		doneNames = [];
+		if (confirm('Are you sure you want to clear all done names?')) {
+			doneNames = [];
+		}
 	}
 
 	$effect(() => {
@@ -228,8 +232,10 @@
 				</div>
 			{/if}
 		</div>
-	</div>		<!-- Two Lists -->
-		<div class="grid gap-6 lg:grid-cols-2">
+	</div>
+
+	<!-- Two Lists -->
+	<div class="grid gap-6 lg:grid-cols-2">
 			<!-- Names List -->
 			<div class="flex flex-col overflow-hidden">
 				<div class="mb-4 flex items-center justify-between">
