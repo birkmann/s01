@@ -561,6 +561,60 @@
 		}
 	}
 
+	function loadProject() {
+		// Get all saved projects from localStorage
+		const savedProjects: string[] = [];
+		for (let i = 0; i < localStorage.length; i++) {
+			const key = localStorage.key(i);
+			if (key?.startsWith('groovebox-project-')) {
+				savedProjects.push(key.replace('groovebox-project-', ''));
+			}
+		}
+		
+		if (savedProjects.length === 0) {
+			alert('No saved projects found');
+			return;
+		}
+		
+		// Show list of projects
+		const projectList = savedProjects.map((name, idx) => `${idx + 1}. ${name}`).join('\n');
+		const selection = prompt(`Select project to load:\n${projectList}\n\nEnter number (1-${savedProjects.length}):`);
+		
+		if (!selection) return;
+		
+		const index = parseInt(selection) - 1;
+		if (isNaN(index) || index < 0 || index >= savedProjects.length) {
+			alert('Invalid selection');
+			return;
+		}
+		
+		const projectName = savedProjects[index];
+		
+		try {
+			const projectData = localStorage.getItem(`groovebox-project-${projectName}`);
+			if (!projectData) {
+				alert('Project not found');
+				return;
+			}
+			
+			const project = JSON.parse(projectData);
+			
+			if (confirm(`Load project "${projectName}"? This will replace all current patterns.`)) {
+				patternSlots = project.patterns;
+				activePatternIndex = project.activePatternIndex || 0;
+				
+				// Load the active pattern
+				if (patternSlots[activePatternIndex]) {
+					loadPattern(activePatternIndex);
+				}
+				
+				alert(`Project "${projectName}" loaded successfully!`);
+			}
+		} catch (e) {
+			alert('Failed to load project: ' + e);
+		}
+	}
+
 	function loadPattern(index: number) {
 		const song = patternSlots[index];
 		if (!song) return;
@@ -892,6 +946,14 @@
 						💾
 					</button>
 					<button
+						onclick={loadProject}
+						class="rounded-lg bg-green-900 px-4 py-2 transition-all hover:bg-green-800"
+						aria-label="Load project"
+						title="Load project from browser storage"
+					>
+						📂
+					</button>
+					<button
 						onclick={exportSong}
 						class="rounded-lg bg-blue-700 px-4 py-2 transition-all hover:bg-blue-600"
 						aria-label="Export project"
@@ -925,7 +987,19 @@
 		<!-- Pattern Slots (16 slots at top) -->
 		<div class="mb-6 rounded-lg bg-gray-900 p-4">
 			<div class="flex items-center justify-between mb-3">
-				<h3 class="text-sm font-semibold text-gray-400">PATTERNS</h3>
+				<div class="flex items-center gap-3">
+					<h3 class="text-sm font-semibold text-gray-400">PATTERNS</h3>
+					{#if isPlaying}
+						<div class="flex items-center gap-1.5">
+							{#each Array(4) as _, loopIdx}
+								<div 
+									class="w-2 h-2 rounded-full transition-all {loopCounter === loopIdx ? 'bg-red-500 scale-125' : 'bg-gray-700'}"
+									title="Loop {loopIdx + 1}/4"
+								></div>
+							{/each}
+						</div>
+					{/if}
+				</div>
 				{#if queuedPatternIndex !== -1}
 					<span class="text-xs text-yellow-500">Pattern {queuedPatternIndex + 1} queued</span>
 				{/if}
