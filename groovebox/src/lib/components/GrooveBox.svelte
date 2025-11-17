@@ -82,6 +82,32 @@
 
 	let intervalId: number | null = null;
 
+	// Song management - 16 pattern slots
+	type Song = {
+		name: string;
+		pattern: boolean[][];
+		instrumentVolumes: number[];
+		instrumentMuted: boolean[];
+		instrumentPitch: number[];
+		synthPattern: number[];
+		synthChordType: number;
+		synthVolume: number;
+		synthMuted: boolean;
+		synthDelay: number;
+		synthReverb: number;
+		bpm: number;
+		volume: number;
+	};
+
+	let patternSlots = $state<(Song | null)[]>(Array(16).fill(null));
+	let activePatternIndex = $state<number>(0);
+	let queuedPatternIndex = $state<number>(-1);
+	let copyMode = $state(false);
+	let copySourceIndex = $state<number>(-1);
+	let songMode = $state(false);
+	let loopCounter = $state(0);
+	let fileInput: HTMLInputElement | null = null;
+
 	onMount(() => {
 		audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
 		masterGain = audioContext.createGain();
@@ -297,6 +323,57 @@
 		}
 
 		currentStep = (currentStep + 1) % STEPS;
+		
+		// Check for pattern switch at 4-bar boundary (every 16 steps)
+		if (currentStep === 0) {
+			if (songMode) {
+				// Song mode: count loops and advance to next pattern after 4 loops
+				loopCounter++;
+				if (loopCounter >= 4) {
+					loopCounter = 0;
+					// Find next available pattern
+					const nextIndex = findNextAvailablePattern(activePatternIndex);
+					if (nextIndex !== activePatternIndex) {
+						// Auto-save current pattern before switching
+						saveCurrentPatternToSlot(activePatternIndex);
+						
+						if (patternSlots[nextIndex]) {
+							loadPattern(nextIndex);
+						} else {
+							clearPatternData();
+						}
+						activePatternIndex = nextIndex;
+					}
+				}
+			} else if (queuedPatternIndex !== -1) {
+				// Manual pattern switch
+				loopCounter = 0; // Reset loop counter
+				// Auto-save current pattern before switching
+				saveCurrentPatternToSlot(activePatternIndex);
+				
+				const queuedIndex = queuedPatternIndex;
+				queuedPatternIndex = -1;
+				if (patternSlots[queuedIndex]) {
+					loadPattern(queuedIndex);
+				} else {
+					// Switch to empty pattern
+					clearPatternData();
+				}
+				activePatternIndex = queuedIndex;
+			}
+		}
+	}
+
+	function findNextAvailablePattern(currentIndex: number): number {
+		// Find next filled pattern slot, wrapping around
+		for (let i = 1; i <= 16; i++) {
+			const nextIndex = (currentIndex + i) % 16;
+			if (patternSlots[nextIndex]) {
+				return nextIndex;
+			}
+		}
+		// If no other patterns found, stay on current
+		return currentIndex;
 	}
 
 	function togglePlay() {
@@ -313,7 +390,14 @@
 	}
 
 	function clearPattern() {
-		if (confirm('Are you sure you want to clear the pattern?')) {
+		if (confirm('Clear all drums and synth patterns?')) {
+			pattern = INSTRUMENTS.map(() => Array(STEPS).fill(false));
+			synthPattern = Array(STEPS).fill(-1);
+		}
+	}
+
+	function clearDrumPattern() {
+		if (confirm('Clear drum pattern?')) {
 			pattern = INSTRUMENTS.map(() => Array(STEPS).fill(false));
 		}
 	}
@@ -324,7 +408,7 @@
 		}
 	}
 
-	function randomPattern() {
+	function randomDrumPattern() {
 		// Detroit techno-inspired patterns
 		pattern = INSTRUMENTS.map((_, instIdx) => {
 			const steps = Array(STEPS).fill(false);
@@ -343,10 +427,9 @@
 				if (Math.random() > 0.6) steps[14] = true;
 			} else if (instIdx === 2) {
 				// Clap: Sparse accents
-				if (Math.random() > 0.5) steps[4] = true;
-				if (Math.random() > 0.5) steps[12] = true;
+				if (Math.random() > 0.5) steps[8] = true;
 			} else if (instIdx === 3) {
-				// Hi-Hat Closed: Syncopated 16th notes
+				// Hi-Hat Closed: Steady 16th pattern with gaps
 				for (let i = 0; i < STEPS; i++) {
 					if (i % 2 === 1) steps[i] = true; // Off-beats
 					else if (Math.random() > 0.6) steps[i] = true; // Some on-beats
@@ -365,6 +448,31 @@
 			
 			return steps;
 		});
+		
+		// Randomize volumes with kick, snare, clap, and hats dominating
+		instrumentVolumes = INSTRUMENTS.map((_, instIdx) => {
+			if (instIdx === 0) {
+				// Kick: High volume (0.75-0.95)
+				return 0.75 + Math.random() * 0.2;
+			} else if (instIdx === 1) {
+				// Snare: High volume (0.7-0.9)
+				return 0.7 + Math.random() * 0.2;
+			} else if (instIdx === 2) {
+				// Clap: High volume (0.65-0.85)
+				return 0.65 + Math.random() * 0.2;
+			} else if (instIdx === 3 || instIdx === 4) {
+				// Hats: High volume (0.7-0.9)
+				return 0.7 + Math.random() * 0.2;
+			} else {
+				// Toms: Lower volume (0.4-0.6)
+				return 0.4 + Math.random() * 0.2;
+			}
+		});
+	}
+
+	function randomPattern() {
+		randomDrumPattern();
+		randomSynthPattern();
 	}
 
 	function randomSynthPattern() {
@@ -397,6 +505,289 @@
 		
 		const progression = progressions[Math.floor(Math.random() * progressions.length)];
 		synthPattern = [...progression];
+	}
+
+	function saveSong() {
+		const name = prompt('Enter pattern name:');
+		if (!name) return;
+		
+		const song: Song = {
+			name,
+			pattern: pattern.map(row => [...row]),
+			instrumentVolumes: [...instrumentVolumes],
+			instrumentMuted: [...instrumentMuted],
+			instrumentPitch: [...instrumentPitch],
+			synthPattern: [...synthPattern],
+			synthChordType,
+			synthVolume,
+			synthMuted,
+			synthDelay,
+			synthReverb,
+			bpm,
+			volume
+		};
+		
+		// Find first empty slot or use current slot
+		let slotIndex = activePatternIndex;
+		const emptySlot = patternSlots.findIndex(slot => slot === null);
+		if (emptySlot !== -1) {
+			slotIndex = emptySlot;
+		}
+		
+		patternSlots[slotIndex] = song;
+		activePatternIndex = slotIndex;
+	}
+
+	function saveProject() {
+		const name = prompt('Enter project name:');
+		if (!name) return;
+		
+		// Auto-save current pattern first
+		saveCurrentPatternToSlot(activePatternIndex);
+		
+		const project = {
+			name,
+			version: '1.0',
+			patterns: patternSlots,
+			activePatternIndex
+		};
+		
+		// Save to localStorage
+		try {
+			localStorage.setItem(`groovebox-project-${name}`, JSON.stringify(project));
+			alert(`Project "${name}" saved successfully!`);
+		} catch (e) {
+			alert('Failed to save project: ' + e);
+		}
+	}
+
+	function loadPattern(index: number) {
+		const song = patternSlots[index];
+		if (!song) return;
+		
+		pattern = song.pattern.map(row => [...row]);
+		instrumentVolumes = [...song.instrumentVolumes];
+		instrumentMuted = [...song.instrumentMuted];
+		instrumentPitch = [...song.instrumentPitch];
+		synthPattern = [...song.synthPattern];
+		synthChordType = song.synthChordType;
+		synthVolume = song.synthVolume;
+		synthMuted = song.synthMuted;
+		synthDelay = song.synthDelay;
+		synthReverb = song.synthReverb;
+		bpm = song.bpm;
+		volume = song.volume;
+	}
+
+	function selectPattern(index: number) {
+		// Auto-save current pattern before switching (even if not yet saved)
+		saveCurrentPatternToSlot(activePatternIndex);
+		
+		if (isPlaying) {
+			// Queue the pattern change for next 4-bar boundary
+			queuedPatternIndex = index;
+		} else {
+			// Switch immediately if not playing
+			if (patternSlots[index]) {
+				loadPattern(index);
+			} else {
+				// Switch to empty pattern - clear current pattern
+				clearPatternData();
+			}
+			activePatternIndex = index;
+		}
+	}
+
+	function saveCurrentPatternToSlot(index: number) {
+		// Check if pattern has any content
+		const hasContent = pattern.some(row => row.some(step => step)) || 
+		                   synthPattern.some(note => note !== -1);
+		
+		if (!hasContent && !patternSlots[index]) {
+			// Empty pattern and not yet saved - don't save
+			return;
+		}
+		
+		// Get existing name or create default name
+		const existingSong = patternSlots[index];
+		const name = existingSong ? existingSong.name : `Pattern ${index + 1}`;
+		
+		patternSlots[index] = {
+			name,
+			pattern: pattern.map(row => [...row]),
+			instrumentVolumes: [...instrumentVolumes],
+			instrumentMuted: [...instrumentMuted],
+			instrumentPitch: [...instrumentPitch],
+			synthPattern: [...synthPattern],
+			synthChordType,
+			synthVolume,
+			synthMuted,
+			synthDelay,
+			synthReverb,
+			bpm,
+			volume
+		};
+	}
+
+	function clearPatternData() {
+		pattern = INSTRUMENTS.map(() => Array(STEPS).fill(false));
+		instrumentVolumes = INSTRUMENTS.map(() => 0.7);
+		instrumentMuted = INSTRUMENTS.map(() => false);
+		instrumentPitch = [0.7, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
+		synthPattern = Array(STEPS).fill(-1);
+		synthChordType = 1;
+		synthVolume = 0.2;
+		synthMuted = false;
+		synthDelay = 0.65;
+		synthReverb = 0.75;
+		bpm = 122;
+		volume = 0.7;
+	}
+
+	function copyPattern(fromIndex: number, toIndex: number) {
+		const song = patternSlots[fromIndex];
+		if (!song) return;
+		
+		const copiedSong: Song = {
+			name: `${song.name} (copy)`,
+			pattern: song.pattern.map(row => [...row]),
+			instrumentVolumes: [...song.instrumentVolumes],
+			instrumentMuted: [...song.instrumentMuted],
+			instrumentPitch: [...song.instrumentPitch],
+			synthPattern: [...song.synthPattern],
+			synthChordType: song.synthChordType,
+			synthVolume: song.synthVolume,
+			synthMuted: song.synthMuted,
+			synthDelay: song.synthDelay,
+			synthReverb: song.synthReverb,
+			bpm: song.bpm,
+			volume: song.volume
+		};
+		
+		patternSlots[toIndex] = copiedSong;
+	}
+
+	function deletePattern(index: number) {
+		if (patternSlots[index] && confirm(`Delete pattern ${index + 1}: "${patternSlots[index]!.name}"?`)) {
+			patternSlots[index] = null;
+			if (activePatternIndex === index) {
+				// Find next available pattern or reset to 0
+				const nextPattern = patternSlots.findIndex(slot => slot !== null);
+				activePatternIndex = nextPattern !== -1 ? nextPattern : 0;
+			}
+		}
+	}
+
+	function duplicateToNextEmpty(fromIndex: number) {
+		const song = patternSlots[fromIndex];
+		if (!song) return;
+		
+		const emptyIndex = patternSlots.findIndex((slot, idx) => slot === null && idx > fromIndex);
+		if (emptyIndex === -1) {
+			// No empty slot after this one, find first empty slot
+			const firstEmpty = patternSlots.findIndex(slot => slot === null);
+			if (firstEmpty === -1) {
+				alert('No empty slots available');
+				return;
+			}
+			copyPattern(fromIndex, firstEmpty);
+		} else {
+			copyPattern(fromIndex, emptyIndex);
+		}
+	}
+
+	function startCopyMode(index: number) {
+		if (!patternSlots[index]) return;
+		copyMode = true;
+		copySourceIndex = index;
+	}
+
+	function handlePatternClick(index: number) {
+		if (copyMode) {
+			// Copy mode: copy from source to this slot
+			if (index !== copySourceIndex) {
+				copyPattern(copySourceIndex, index);
+			}
+			copyMode = false;
+			copySourceIndex = -1;
+		} else {
+			// Normal mode: select pattern
+			selectPattern(index);
+		}
+	}
+
+	function exportSong() {
+		// Auto-save current pattern first
+		saveCurrentPatternToSlot(activePatternIndex);
+		
+		const name = prompt('Enter project name for export:', 'groovebox-project');
+		if (!name) return;
+		
+		const project = {
+			name,
+			version: '1.0',
+			patterns: patternSlots,
+			activePatternIndex,
+			exportDate: new Date().toISOString()
+		};
+		
+		const json = JSON.stringify(project, null, 2);
+		const blob = new Blob([json], { type: 'application/json' });
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement('a');
+		a.href = url;
+		a.download = `${name}.json`;
+		a.click();
+		URL.revokeObjectURL(url);
+	}
+
+	function importSong() {
+		fileInput?.click();
+	}
+
+	function handleFileImport(event: Event) {
+		const input = event.target as HTMLInputElement;
+		const file = input.files?.[0];
+		if (!file) return;
+		
+		const reader = new FileReader();
+		reader.onload = (e) => {
+			try {
+				const data = JSON.parse(e.target?.result as string);
+				
+				// Check if it's a project file (with patterns array) or single pattern
+				if (data.patterns && Array.isArray(data.patterns)) {
+					// Import entire project
+					if (confirm('Import entire project? This will replace all current patterns.')) {
+						patternSlots = data.patterns;
+						activePatternIndex = data.activePatternIndex || 0;
+						// Load the active pattern
+						if (patternSlots[activePatternIndex]) {
+							loadPattern(activePatternIndex);
+						}
+						alert('Project imported successfully!');
+					}
+				} else {
+					// Import single pattern (legacy format)
+					const song: Song = data;
+					
+					// Find first empty slot
+					const emptySlot = patternSlots.findIndex(slot => slot === null);
+					if (emptySlot !== -1) {
+						patternSlots[emptySlot] = song;
+						loadPattern(emptySlot);
+						activePatternIndex = emptySlot;
+						alert('Pattern imported to slot ' + (emptySlot + 1));
+					} else {
+						alert('All pattern slots are full');
+					}
+				}
+			} catch (error) {
+				alert('Error importing file: ' + error);
+			}
+		};
+		reader.readAsText(file);
+		input.value = '';
 	}
 
 	$effect(() => {
@@ -455,25 +846,155 @@
 
 				<div class="flex gap-2">
 					<button
-						onclick={randomPattern}
-						class="rounded-lg bg-gray-800 px-4 py-2 transition-all hover:bg-gray-700"
-						aria-label="Random pattern"
+						onclick={() => { songMode = !songMode; if (songMode) loopCounter = 0; }}
+						class="rounded-lg px-4 py-2 transition-all {songMode ? 'bg-red-600 ring-2 ring-red-400' : 'bg-gray-800 hover:bg-gray-700'}"
+						aria-label="Toggle song mode"
+						title="Song Mode: Loop each pattern 4x and advance"
 					>
-						<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-							<path d="M5 4a2 2 0 00-2 2v6H2V6a4 4 0 014-4h6v1H6zM15 4h-2v1h2v2h1V5a2 2 0 00-2-2zm0 11h1v-2h-1v2zm-11 1a2 2 0 002 2h6v-1H6v-2H5v1z"/>
-						</svg>
+						{songMode ? '🔁' : '▶️'}
+					</button>
+					<button
+						onclick={randomPattern}
+						class="rounded-lg bg-gray-800 px-4 py-2 transition-all hover:bg-gray-700 text-lg"
+						aria-label="Random all patterns"
+						title="Randomize drums and synth"
+					>
+						🎲
 					</button>
 					<button
 						onclick={clearPattern}
-						class="rounded-lg bg-gray-800 px-4 py-2 transition-all hover:bg-gray-700"
-						aria-label="Clear pattern"
+						class="rounded-lg bg-gray-800 px-4 py-2 transition-all hover:bg-gray-700 text-lg"
+						aria-label="Clear all patterns"
+						title="Clear drums and synth"
 					>
-						<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-							<path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
-						</svg>
+						🗑️
 					</button>
 				</div>
+
+				<!-- Song Management -->
+				<div class="flex gap-2">
+					<button
+						onclick={saveSong}
+						class="rounded-lg bg-green-700 px-4 py-2 transition-all hover:bg-green-600"
+						aria-label="Save pattern"
+						title="Save current pattern to slot"
+					>
+						<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+							<path d="M7.707 10.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V6h5a2 2 0 012 2v7a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2h5v5.586l-1.293-1.293zM9 4a1 1 0 012 0v2H9V4z"/>
+						</svg>
+					</button>
+					<button
+						onclick={saveProject}
+						class="rounded-lg bg-green-800 px-4 py-2 transition-all hover:bg-green-700"
+						aria-label="Save project"
+						title="Save all patterns to browser storage"
+					>
+						💾
+					</button>
+					<button
+						onclick={exportSong}
+						class="rounded-lg bg-blue-700 px-4 py-2 transition-all hover:bg-blue-600"
+						aria-label="Export project"
+						title="Export all patterns to file"
+					>
+						<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+							<path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+						</svg>
+					</button>
+					<button
+						onclick={importSong}
+						class="rounded-lg bg-purple-700 px-4 py-2 transition-all hover:bg-purple-600"
+						aria-label="Import project"
+						title="Import project or pattern from file"
+					>
+						<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+							<path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+						</svg>
+					</button>
+					<input
+						type="file"
+						accept=".json"
+						bind:this={fileInput}
+						onchange={handleFileImport}
+						class="hidden"
+					/>
+				</div>
 			</div>
+		</div>
+
+		<!-- Pattern Slots (16 slots at top) -->
+		<div class="mb-6 rounded-lg bg-gray-900 p-4">
+			<div class="flex items-center justify-between mb-3">
+				<h3 class="text-sm font-semibold text-gray-400">PATTERNS</h3>
+				{#if queuedPatternIndex !== -1}
+					<span class="text-xs text-yellow-500">Pattern {queuedPatternIndex + 1} queued</span>
+				{/if}
+			</div>
+			<div class="grid grid-cols-16 gap-1">
+				{#each patternSlots as slot, idx}
+					<div class="relative h-16 rounded transition-all {copyMode && idx === copySourceIndex
+							? 'bg-blue-700 ring-2 ring-blue-400'
+							: activePatternIndex === idx 
+								? 'bg-red-600 ring-2 ring-white' 
+								: queuedPatternIndex === idx
+									? 'bg-yellow-600 ring-2 ring-yellow-400'
+									: slot 
+										? 'bg-gray-700 hover:bg-gray-600' 
+										: 'bg-gray-800 hover:bg-gray-750 text-gray-600'}"
+						role="button"
+						tabindex="0"
+						onclick={() => handlePatternClick(idx)}
+						onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handlePatternClick(idx); }}
+					>
+						<div class="flex flex-col items-center justify-center h-full cursor-pointer">
+							<span class="text-xs font-bold">{idx + 1}</span>
+							{#if slot}
+								<span class="text-[0.6rem] truncate w-full px-1 text-center">{slot.name}</span>
+							{:else}
+								<span class="text-[0.6rem]">{copyMode ? 'paste' : 'new'}</span>
+							{/if}
+						</div>
+						{#if slot && !copyMode}
+							<div class="absolute top-0.5 right-0.5 flex gap-0.5">
+								<button
+									onclick={(e) => { e.stopPropagation(); deletePattern(idx); }}
+									class="w-5 h-5 rounded-full bg-black/70 hover:bg-red-600 flex items-center justify-center text-white"
+									aria-label="Delete pattern {idx + 1}"
+									title="Delete pattern"
+								>
+									<svg class="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+										<path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+									</svg>
+								</button>
+								<button
+									onclick={(e) => { e.stopPropagation(); duplicateToNextEmpty(idx); }}
+									class="w-5 h-5 rounded-full bg-black/70 hover:bg-green-600 flex items-center justify-center text-white text-xs font-bold"
+									aria-label="Duplicate pattern {idx + 1} to next empty slot"
+									title="Duplicate to next empty slot"
+								>
+									+
+								</button>
+								<button
+									onclick={(e) => { e.stopPropagation(); startCopyMode(idx); }}
+									class="w-5 h-5 rounded-full bg-black/70 hover:bg-blue-600 flex items-center justify-center text-white text-xs font-bold"
+									aria-label="Copy pattern {idx + 1}"
+									title="Copy pattern to any slot"
+								>
+									⎘
+								</button>
+							</div>
+						{/if}
+					</div>
+				{/each}
+			</div>
+			{#if copyMode}
+				<div class="mb-4 text-center text-sm text-blue-400 bg-gray-900 p-2 rounded">
+					Copy mode: Click destination slot to paste pattern "{patternSlots[copySourceIndex]?.name}"
+					<button onclick={() => { copyMode = false; copySourceIndex = -1; }} class="ml-4 px-2 py-1 bg-gray-800 hover:bg-gray-700 rounded">
+						Cancel
+					</button>
+				</div>
+			{/if}
 		</div>
 
 		<!-- Controls -->
@@ -510,7 +1031,25 @@
 		<!-- Step Sequencer -->
 		<div class="rounded-lg bg-gray-900 p-6 mb-6">
 			<div class="mb-4 flex items-center justify-between">
-				<h2 class="text-lg font-semibold">Drum Sequencer</h2>
+				<div class="flex items-center gap-4">
+					<h2 class="text-lg font-semibold">Drum Sequencer</h2>
+					<div class="flex gap-2">
+						<button
+							onclick={randomDrumPattern}
+							class="rounded-lg bg-gray-800 px-4 py-2 transition-all hover:bg-gray-700 text-lg"
+							title="Randomize drums"
+						>
+							🎲
+						</button>
+						<button
+							onclick={clearDrumPattern}
+							class="rounded-lg bg-gray-800 px-4 py-2 transition-all hover:bg-gray-700 text-lg"
+							title="Clear drums"
+						>
+							🗑️
+						</button>
+					</div>
+				</div>
 				<div class="flex gap-1">
 					{#each Array(4) as _, bar}
 						<div class="flex gap-0.5">
@@ -635,21 +1174,19 @@
 					<div class="flex gap-2">
 						<button
 							onclick={randomSynthPattern}
-							class="rounded-lg bg-gray-800 px-4 py-2 transition-all hover:bg-gray-700"
+							class="rounded-lg bg-gray-800 px-4 py-2 transition-all hover:bg-gray-700 text-lg"
 							aria-label="Random synth pattern"
+							title="Randomize synth"
 						>
-							<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-								<path d="M5 4a2 2 0 00-2 2v6H2V6a4 4 0 014-4h6v1H6zM15 4h-2v1h2v2h1V5a2 2 0 00-2-2zm0 11h1v-2h-1v2zm-11 1a2 2 0 002 2h6v-1H6v-2H5v1z"/>
-							</svg>
+							🎲
 						</button>
 						<button
 							onclick={clearSynthPattern}
-							class="rounded-lg bg-gray-800 px-4 py-2 transition-all hover:bg-gray-700"
+							class="rounded-lg bg-gray-800 px-4 py-2 transition-all hover:bg-gray-700 text-lg"
 							aria-label="Clear synth pattern"
+							title="Clear synth"
 						>
-							<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-								<path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
-							</svg>
+							🗑️
 						</button>
 					</div>
 				</div>
