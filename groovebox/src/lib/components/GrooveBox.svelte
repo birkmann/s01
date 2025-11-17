@@ -259,7 +259,7 @@
 		if (!audioContext || !masterGain || synthMuted) return;
 		if (!delayNode || !delayMix || !reverbNode || !reverbMix) return;
 
-		const now = audioContext.currentTime;
+		const now = audioContext!.currentTime;
 		const baseFreq = SYNTH_NOTES[noteIndex].freq;
 		const chordType = CHORD_TYPES[synthChordType];
 
@@ -271,8 +271,8 @@
 		// Play each note in the chord
 		chordType.intervals.forEach(interval => {
 			const freq = baseFreq * Math.pow(2, interval / 12);
-			const oscillator = audioContext.createOscillator();
-			const gainNode = audioContext.createGain();
+			const oscillator = audioContext!.createOscillator();
+			const gainNode = audioContext!.createGain();
 
 			oscillator.type = 'sawtooth';
 			oscillator.frequency.value = freq;
@@ -291,7 +291,7 @@
 			
 			// Route to delay if enabled
 			if (synthDelay > 0) {
-				const delayGain = audioContext.createGain();
+				const delayGain = audioContext!.createGain();
 				delayGain.gain.value = synthDelay;
 				gainNode.connect(delayGain);
 				delayGain.connect(delayNode!);
@@ -299,7 +299,7 @@
 			
 			// Route to reverb if enabled
 			if (synthReverb > 0) {
-				const reverbGain = audioContext.createGain();
+				const reverbGain = audioContext!.createGain();
 				reverbGain.gain.value = synthReverb;
 				gainNode.connect(reverbGain);
 				reverbGain.connect(reverbNode!);
@@ -1000,9 +1000,10 @@
 		<!-- Controls -->
 		<div class="mb-6 grid grid-cols-2 gap-4 rounded-lg bg-gray-900 p-4">
 			<div>
-				<label class="mb-2 block text-sm font-medium text-gray-400">BPM</label>
+				<label for="bpm-slider" class="mb-2 block text-sm font-medium text-gray-400">BPM</label>
 				<div class="flex items-center gap-3">
 					<input
+						id="bpm-slider"
 						type="range"
 						bind:value={bpm}
 						min="60"
@@ -1013,9 +1014,10 @@
 				</div>
 			</div>
 			<div>
-				<label class="mb-2 block text-sm font-medium text-gray-400">Master Volume</label>
+				<label for="master-volume-slider" class="mb-2 block text-sm font-medium text-gray-400">Master Volume</label>
 				<div class="flex items-center gap-3">
 					<input
+						id="master-volume-slider"
 						type="range"
 						bind:value={volume}
 						min="0"
